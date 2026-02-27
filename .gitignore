@@ -4,3 +4,6 @@ build/
 .ipython/
 demo/output/
 customquad.egg-info/
+.pytest_cache/
+__pycache__/
+*.pyc

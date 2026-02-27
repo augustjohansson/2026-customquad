@@ -5,164 +5,287 @@ in FEniCSx (https://fenicsproject.org). By custom quadrature we mean
 user-specified quadrature rules in different elements specified at
 runtime. These can be used for performing surface and volume integrals
 over cut elements in methods such as CutFEM, TraceFEM and
-\phi-FEM. The user can also provide normals in the quadrature
+φ-FEM. The user can also provide normals in the quadrature
 points.
 
-See the demo `poisson.py`, the tests and read the description below to
-see how to use the library.
+See the demo `poisson.py`, the examples in `examples/`, the tests,
+and read the description below to see how to use the library.
 
 ## Dependencies
 
-In addition to dolfinx (https://github.com/FEniCS/dolfinx/) and basix
-(https://github.com/FEniCS/basix/), the library depends to a large
-extent on a fork of ffcx at
-- https://github.com/augustjohansson/ffcx-custom
+This library targets **DOLFINx v0.9.0** and its ecosystem:
 
-A small change is made to ufl to allow for normals in cell
-integrals. To this end, this fork of ufl is needed
-- https://github.com/augustjohansson/ufl-custom
+- **DOLFINx** v0.9.0 (https://github.com/FEniCS/dolfinx/)
+- **Basix** v0.9.0 (https://github.com/FEniCS/basix/)
+- **FFCx** (custom fork): https://github.com/augustjohansson/2026-ffcx-priv
+- **UFL** (https://github.com/FEniCS/ufl/)
 
-Some of the demos use the Algoim library for obtaining quadrature
-rules. It is found at
-- https://algoim.github.io
+Optional dependencies for quadrature generation:
+- **Algoim** (https://algoim.github.io) — quadrature on implicitly defined domains
+- **cppyy** — C++/Python bindings for Algoim integration
 
-## Installation (non-dev)
+## Installation
 
-Please use the provided docker file based on the dolfinx docker
-image. The docker file may be built and run from the main directory as
-```
+### Docker (recommended)
+
+Use the provided Docker file based on the DOLFINx v0.9.0 image:
+```bash
 docker build -f docker/Dockerfile -t customquad .
 docker run -it -v `pwd`:/root customquad bash -i
 ```
-Then install the customquad module using pip, e.g.,
-```
+
+Then install the customquad module:
+```bash
 pip3 install . -U
 ```
+
 Compiling the ffcx forms with runtime quadrature requires a C++
-compiler, whereas standard ffcx forms is compiled using a C
-compiler. For now we simply overwrite the C compiler with a C++
-compiler. In addition, since C++ forbids pointer and integer
-comparison, the -fpermissive flag must be set.
-```
+compiler. Override the C compiler with a C++ compiler:
+```bash
 export CC="/usr/lib/ccache/g++ -fpermissive"
 ```
-A bashrc file with useful aliases is provided in the utils directory.
 
-## Installation (dev)
+A bashrc file with useful aliases is provided in the `utils/` directory.
 
-For the development of this library, the development of ffcx is the
-most challenging part. I have the following setup:
+### Development
+
+```bash
+git clone git@github.com:augustjohansson/2026-customquad-priv.git
+cd 2026-customquad-priv
+git clone git@github.com:augustjohansson/2026-ffcx-priv.git
 ```
-git clone git@github.com:augustjohansson/customquad.git
-cd customquad
-git clone git@github.com:augustjohansson/ffcx-custom.git
-git clone git@github.com:augustjohansson/ufl-custom.git
-git config --global --add safe.directory /root/ffcx-custom
+
+Then start the Docker container and use `install-all` from
+`utils/bashrc.sh`.
+
+## Quick Start
+
+```python
+import dolfinx
+import ufl
+import customquad
+import numpy as np
+from mpi4py import MPI
+
+# Create mesh
+mesh = dolfinx.mesh.create_unit_square(
+    MPI.COMM_WORLD, 10, 10,
+    dolfinx.mesh.CellType.quadrilateral
+)
+
+# Define form with runtime quadrature
+V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
+u = ufl.TrialFunction(V)
+v = ufl.TestFunction(V)
+dx_cut = ufl.dx(metadata={"quadrature_rule": "runtime"})
+form = dolfinx.fem.form(ufl.inner(u, v) * dx_cut)
+
+# Provide custom quadrature data
+cells = np.array([0, 1, 2])  # cells to integrate over
+qr_pts = [np.array([0.5, 0.5])] * 3  # quadrature points per cell
+qr_w = [np.array([1.0])] * 3  # quadrature weights per cell
+
+# Assemble
+A = customquad.assemble_matrix(form, [(cells, qr_pts, qr_w)])
+A.assemble()
 ```
-Then I start the container and use the `install-all` alias in the
-provided bashrc.sh to install ffcx, ufl and customquad, as well as
-overriding the C compiler with a C++ compiler as described above.
+
+## Quadrature Sources
+
+### 1. Algoim (Level Set)
+
+The Algoim library generates high-order quadrature rules for domains
+defined by implicit functions (level sets). See `demo/algoim_utils.py`
+for the interface.
+
+```python
+import algoim_utils
+result = algoim_utils.generate_qr(mesh, NN, degree, "circle", opts)
+```
+
+### 2. Surface Triangulation
+
+The `customquad.surface_triangulation` module generates quadrature rules
+from triangulated surfaces (e.g., STL files). This is useful when the
+domain boundary is given as a mesh rather than an implicit function.
+
+```python
+from customquad.surface_triangulation import (
+    create_sphere_triangulation,
+    generate_quadrature_from_triangulation,
+    load_stl,
+)
+
+# From built-in shapes
+verts, tris, normals = create_sphere_triangulation(radius=1.0, refinement=3)
+
+# Or from an STL file
+verts, tris, normals = load_stl("model.stl")
+
+# Generate quadrature
+result = generate_quadrature_from_triangulation(mesh, verts, tris, normals)
+```
+
+### 3. CAD (Future Work)
+
+For CAD-based quadrature generation, a separate repository/tool is
+recommended. The input should be in an open, freely available CAD format
+(e.g., STEP, IGES). The interface to customquad should use numpy arrays,
+following the same pattern as the surface triangulation module.
+
+## Tests
+
+Run the full test suite:
+```bash
+cd test && python -m pytest -v
+```
+
+### PDE Tests
+
+- **Poisson convergence** (`test_pde_convergence.py`): Verifies optimal
+  convergence of the Poisson equation on circle and sphere domains for
+  CG1 and CG2 elements in L2 and H10 norms.
+
+- **Linear elasticity convergence** (`test_pde_convergence.py`): Verifies
+  optimal convergence of the linear elasticity equations with the same
+  domain/element combinations.
+
+- **Surface PDE** (`test_surface_pde.py`): Tests the Laplace-Beltrami
+  operator on circle and sphere surfaces.
+
+### Geometry Tests
+
+- **Volume and area** (`test_geometry.py`): Verifies that computed volumes
+  and surface areas converge to exact values.
+
+- **Cell classification** (`test_geometry.py`): Verifies that cells are
+  consistently classified as cut, uncut, or outside.
+
+- **Cut domains** (`test_geometry.py`): Tests cut faces (2D) and cut
+  edges (3D).
+
+- **Quadrature consistency** (`test_geometry.py`): Verifies that
+  quadrature data arrays have consistent sizes.
+
+### Surface Triangulation Tests
+
+- **Geometry checks** (`test_surface_triangulation.py`): Tests sphere and
+  cube triangulation, ray casting, normals, and surface area convergence.
+
+## Examples
+
+- `examples/poisson_convergence.py` — Poisson convergence study
+- `examples/elasticity_convergence.py` — Linear elasticity convergence study
+- `examples/laplace_beltrami.py` — Surface PDE example
+- `examples/geometry_check.py` — Geometry verification
+- `examples/surface_triangulation_example.py` — Surface triangulation demo
+- `demo/poisson.py` — Original Poisson demo with algoim
+- `demo/vector_poisson.py` — Vector Poisson demo
 
 ## Description
 
 The idea behind the library is to modify ffcx to change the generated
 forms such that they evaluate basis functions in provided quadrature
-points.
+points at runtime.
 
-For example, we may be interested in evaluating the integral
+For example, to evaluate the bilinear form
 ```
-a_bulk = \int_\Omega \nabla u \cdot \nabla v
-````
-in quadrature points that are different in each cell. Say we have a
-list of these cells with quadrature points and weights:
+a = ∫_Ω ∇u · ∇v
+```
+with custom quadrature points in each cell:
 
-```
-cut_cells = [0, 1, 5]
-qr_pts = [qr_pts_cell_0, qr_pts_cell_1, qr_pts_cell_5]
-qr_w = [qr_w_cell_0, qr_w_cell_1, qr_w_cell_5]
-```
-
-The local quadrature points and weights are flat numpy arrays. Then
-the runtime assembly is done by first constructing a custom measure
-```
+```python
+# Custom measure
 dx_cut = ufl.dx(metadata={"quadrature_rule": "runtime"})
-```
-Then, the customquad matrix assembly routines may be called on a
-dolfinx form as
-```
+
+# Custom assembly
 form = dolfinx.fem.form(a_bulk * dx_cut)
 A = customquad.assemble_matrix(form, [(cut_cells, qr_pts, qr_w)])
-A.assemble()
 ```
-The reason for having a list of tuples in the second argument is to
-allow for multiple forms with their own quadrature data in the future.
 
-To understand a bit how the modifications to ffcx is done, we can look
-in ffcx's cache directory (e.g. ~/.cache/fenics). Here there are files
-such as `libffcx_forms_...c` which contaian standard tabulate tensor
-functions that may look like
-```cpp
-void tabulate_tensor_integral_a0f3282139356df733c38db2e5d422f3272a1d5c(double*  A,
-				    const double*  w,
-				    const double*  c,
-				    const double*  coordinate_dofs,
-				    const int*  entity_local_index,
-				    const uint8_t*  quadrature_permutation)
-{
-  // Quadrature rules
-  static const double weights_8c4[16] = { 0.03025074832140047, 0.05671296296296294, 0.05671296296296292, 0.03025074832140047, 0.05671296296296294, 0.1063233257526736, 0.1063233257526736, 0.05671296296296294, 0.05671296296296292, 0.1063233257526736, 0.1063233257526735, 0.05671296296296292, 0.03025074832140047, 0.05671296296296294, 0.05671296296296292, 0.03025074832140047 };
-  // Precomputed values of basis functions and precomputations
-  // FE* dimensions: [permutation][entities][points][dofs]
-  static const double FE8_C0_F_Q8c4[1][6][16][8] = {{{{ ... }}}};
-  static const double FE9_C1_D001_F_Q8c4[1][6][16][8] = {{{{ ... }}}};
-  static const double FE9_C1_D010_F_Q8c4[1][6][16][8] = {{{{ ... }}}};
-  static const double FE9_C1_D100_F_Q8c4[1][6][16][8] = {{{{ ... }}}};
-  ...
-}
-```
-The function above is generated without runtime quadrature: the
-weights and the basis functions are fixed. What the custom ffcx
-implementation does is to generate code such that basix
-(https://github.com/FEniCS/basix/) is used to evaluate the basis using
-quadrature points given at runtime. Corresponding weights must also be
-provided. If the form involves normals, these must be provided in the
-quadrature points.
+The generated C++ code calls `basix` at runtime to evaluate basis
+functions at the provided quadrature points, rather than using
+precomputed values at fixed quadrature points.
 
-A tabulate tensor function with runtime quadrature may look like this:
-```cpp
-void tabulate_tensor_integral_3edb7c068402923a697d72e1b03e0957554f29c3(double* A,
-				    const double* w,
-				    const double* c,
-				    const double* coordinate_dofs,
-				    const int* entity_local_index,
-				    const uint8_t* quadrature_permutation,
-				    int num_quadrature_points,
-				    const double* quadrature_points,
-				    const double* quadrature_weights,
-				    const double* quadrature_normals)
-{
-  // Quadrature rules
-  const double* weights_8eb = quadrature_weights;
-  // Precomputed values of basis functions and precomputations
-  // FE* dimensions: [permutation][entities][points][dofs]
-  double**** FE8_C0_Q8eb;
-  double**** FE9_C0_D100_Q8eb;
-  double**** FE9_C1_D010_Q8eb;
-  double**** FE9_C2_D001_Q8eb;
-  // Compute basis and/or derivatives using basix
-  call_basix(&FE8_C0_Q8eb, num_quadrature_points, quadrature_points, 0, 1, 5, 1, 0, 3);
-  call_basix(&FE9_C0_D100_Q8eb, num_quadrature_points, quadrature_points, 1, 1, 5, 1, 0, 3);
-  call_basix(&FE9_C1_D010_Q8eb, num_quadrature_points, quadrature_points, 2, 1, 5, 1, 0, 3);
-  call_basix(&FE9_C2_D001_Q8eb, num_quadrature_points, quadrature_points, 3, 1, 5, 1, 0, 3);
-  ...
-}
-```
-The `call_basix` function is a C++ function that evaluates the basis
-(and derivatives) using basix (see `call_basix.hpp`). There's room for
-improvement here: one call to `call_basix` should be sufficient. Note
-that evaluating the Jacobian needs derivatives of the basis. The fixed
-arguments to `call_basix` include type of basis function, which
-derivative to compute, quadrature degree, and more.
+## Relevant PDEs and Applications
+
+### PDEs of Interest
+
+The following PDEs are particularly relevant for cut element methods:
+
+1. **Poisson equation** — The standard benchmark for elliptic PDEs.
+   Tests the basic discretization accuracy.
+
+2. **Linear elasticity** — Tests vector-valued problems and the
+   interaction between different stress components.
+
+3. **Stokes equations** — Tests saddle-point problems and inf-sup
+   stability on cut meshes.
+
+4. **Navier-Stokes equations** — Fluid flow around immersed bodies
+   is a primary application of CutFEM.
+
+5. **Convection-diffusion** — Tests stabilization techniques on cut
+   elements with convection-dominated problems.
+
+6. **Surface PDEs (Laplace-Beltrami)** — Important for surface
+   diffusion, phase-field models, and membrane mechanics.
+
+7. **Coupled bulk-surface problems** — E.g., diffusion in a domain
+   coupled to surface reactions.
+
+8. **Heat equation** — Time-dependent problems on evolving domains.
+
+9. **Wave equation** — Tests stability and accuracy for hyperbolic
+   problems on cut meshes.
+
+10. **Interface problems** — Two-material problems with discontinuous
+    coefficients across the interface.
+
+### Geometry Representations
+
+Different geometry representations may be used to define the cut domain:
+
+1. **Level set functions** — The domain is defined as {x : φ(x) < 0}
+   where φ is a smooth function. Used by Algoim. Best for smooth,
+   implicitly defined surfaces.
+
+2. **CAD models (B-rep)** — Boundary representation using NURBS patches.
+   Formats: STEP, IGES, BREP. Exact geometry, but complex quadrature
+   generation.
+
+3. **Surface triangulations** — Piecewise linear approximation of the
+   surface. Formats: STL, OBJ, PLY. Easy to generate and widely
+   available, but only piecewise linear accuracy.
+
+4. **Constructive Solid Geometry (CSG)** — Boolean operations on
+   primitive shapes (spheres, cubes, cylinders). Good for simple
+   geometries.
+
+5. **Signed distance functions** — Special case of level sets where
+   |∇φ| = 1. Useful for narrow-band methods and mesh adaptation.
+
+6. **Phase-field functions** — Smooth approximation of the interface
+   with a diffuse transition region. Used in phase-field models.
+
+7. **Point clouds** — Unstructured set of points on the surface.
+   Requires reconstruction (e.g., Poisson surface reconstruction)
+   before quadrature generation.
+
+8. **Octree/voxel representations** — Hierarchical spatial
+   decomposition. Used in computational geometry and medical imaging.
+
+9. **Implicit neural representations** — Neural networks that
+   represent the signed distance function. Emerging approach for
+   complex geometries.
+
+10. **Parametric surfaces** — Surfaces defined by parametric mappings.
+    Used in isogeometric analysis.
+
+## CI/CD
+
+Automated testing runs when pull requests are merged to `main`.
+See `.github/workflows/ci.yml`.
 
 ## License
 
