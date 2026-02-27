@@ -34,16 +34,7 @@ def get_num_nodes(mesh):
 
 def get_dofs(V):
     """
-    customquad.assemble
-    (Pdb++) V
-    <dolfinx.cpp.fem.FunctionSpace object at 0x7fb5163b5eb0>
-    <dolfinx.cpp.fem.DofMap object at 0x7fb521c7ae30>
-    have list()
-
-    but if type(V) = <class 'dolfinx.fem.function.FunctionSpace'>
-    <dolfinx.fem.dofmap.DofMap object at 0x7fe5f7511360>
-    have V.dofmap.list
-
+    Get DOF mapping for function space V.
     """
     num_cells = get_num_cells(V.mesh)
     bs = V.dofmap.index_map_bs
