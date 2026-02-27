@@ -1,13 +1,28 @@
 import pytest
 import dolfinx
+import dolfinx.fem
+import dolfinx.fem.petsc
+import dolfinx.mesh
 from mpi4py import MPI
 import numpy as np
 import customquad as cq
 import ufl
-import FIAT
+import basix
 import common
 from petsc4py import PETSc
 import itertools
+
+
+def _get_quadrature(cell_type, degree):
+    """Get quadrature points and weights using basix."""
+    if cell_type == dolfinx.mesh.CellType.quadrilateral:
+        basix_cell = basix.CellType.quadrilateral
+    elif cell_type == dolfinx.mesh.CellType.hexahedron:
+        basix_cell = basix.CellType.hexahedron
+    else:
+        raise ValueError(f"Unsupported cell type: {cell_type}")
+    pts, wts = basix.make_quadrature(basix_cell, degree)
+    return pts, wts
 
 
 @pytest.mark.parametrize(
@@ -24,9 +39,8 @@ import itertools
 @pytest.mark.parametrize("fcn", [common.fcn1, common.fcn2, common.fcn3, common.fcn4])
 def test_quads_assembly(assembler, norm, N, xmin, xmax, fcn):
     polynomial_order = 1
-    quadrature_degree = 2
-    fiat_element = FIAT.reference_element.UFCQuadrilateral()
     cell_type = dolfinx.mesh.CellType.quadrilateral
+    pts, wts = _get_quadrature(cell_type, 2)
     mesh = dolfinx.mesh.create_rectangle(
         MPI.COMM_WORLD,
         np.array([xmin, xmax]),
@@ -34,7 +48,7 @@ def test_quads_assembly(assembler, norm, N, xmin, xmax, fcn):
         cell_type,
     )
 
-    b, b_ref = assembler(mesh, fiat_element, polynomial_order, quadrature_degree, fcn)
+    b, b_ref = assembler(mesh, pts, wts, polynomial_order, fcn)
     assert norm(b - b_ref) / norm(b_ref) < 1e-10
 
 
@@ -52,9 +66,8 @@ def test_quads_assembly(assembler, norm, N, xmin, xmax, fcn):
 @pytest.mark.parametrize("fcn", [common.fcn1, common.fcn2, common.fcn3, common.fcn4])
 def test_hexes_assembly(assembler, norm, N, xmin, xmax, fcn):
     polynomial_order = 1
-    quadrature_degree = 2
-    fiat_element = FIAT.reference_element.UFCHexahedron()
     cell_type = dolfinx.mesh.CellType.hexahedron
+    pts, wts = _get_quadrature(cell_type, 2)
     mesh = dolfinx.mesh.create_box(
         MPI.COMM_WORLD,
         np.array([xmin, xmax]),
@@ -62,7 +75,7 @@ def test_hexes_assembly(assembler, norm, N, xmin, xmax, fcn):
         cell_type,
     )
 
-    b, b_ref = assembler(mesh, fiat_element, polynomial_order, quadrature_degree, fcn)
+    b, b_ref = assembler(mesh, pts, wts, polynomial_order, fcn)
     assert norm(b - b_ref) / norm(b_ref) < 1e-10
 
 
@@ -128,7 +141,7 @@ def test_edge_integral():
     num_cells = cq.utils.get_num_cells(mesh)
     cells = np.arange(num_cells)
 
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", 1))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     v = ufl.TestFunction(V)
     integrand = 1 * v
 
@@ -228,7 +241,7 @@ def test_face_integral():
     num_cells = cq.utils.get_num_cells(mesh)
     cells = np.arange(num_cells)
 
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", 1))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     v = ufl.TestFunction(V)
     integrand = 1 * v
 

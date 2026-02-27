@@ -29,7 +29,7 @@ def write(filename, mesh, data):
         "w",
     ) as xdmffile:
         xdmffile.write_mesh(mesh)
-        if isinstance(data, dolfinx.mesh.MeshTagsMetaClass):
+        if isinstance(data, dolfinx.mesh.MeshTags):
             xdmffile.write_meshtags(data)
         elif isinstance(data, dolfinx.fem.Function):
             xdmffile.write_function(data)
@@ -134,7 +134,7 @@ facetags = customquad.utils.get_facetags(
 write("output/celltags" + str(args.N) + ".xdmf", mesh, celltags)
 
 # FEM
-V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", 1))
+V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
 g = dolfinx.fem.Function(V)
@@ -309,8 +309,8 @@ if gdim == 2:
     # Pad with zero column
     pts = np.hstack((pts, np.zeros((pts.shape[0], 1))))
 
-cell_candidates = dolfinx.cpp.geometry.compute_collisions(bb_tree, pts)
-cells = dolfinx.cpp.geometry.compute_colliding_cells(mesh, cell_candidates, pts)
+cell_candidates = dolfinx.geometry.compute_collisions_points(bb_tree, pts)
+cells = dolfinx.geometry.compute_colliding_cells(mesh, cell_candidates, pts)
 uh_vals = uh.eval(pts, cells.array).flatten()
 print("uh in range", uh_vals.min(), uh_vals.max())
 
@@ -329,7 +329,7 @@ if gdim == 2:
     np.savetxt(filename, err)
 
 # Print
-h = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, cut_cells)
+h = dolfinx.mesh.h(mesh, mesh.topology.dim, cut_cells)
 conv = np.array(
     [
         max(h),

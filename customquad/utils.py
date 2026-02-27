@@ -1,4 +1,6 @@
 import dolfinx
+import dolfinx.fem
+import dolfinx.mesh
 import numba
 import numpy as np
 from petsc4py import PETSc
@@ -32,26 +34,14 @@ def get_num_nodes(mesh):
 
 def get_dofs(V):
     """
-    customquad.assemble
-    (Pdb++) V
-    <dolfinx.cpp.fem.FunctionSpace object at 0x7fb5163b5eb0>
-    <dolfinx.cpp.fem.DofMap object at 0x7fb521c7ae30>
-    have list()
-
-    but if type(V) = <class 'dolfinx.fem.function.FunctionSpace'>
-    <dolfinx.fem.dofmap.DofMap object at 0x7fe5f7511360>
-    have V.dofmap.list
-
+    Get DOF mapping for function space V.
     """
     num_cells = get_num_cells(V.mesh)
     bs = V.dofmap.index_map_bs
     num_loc_dofs = V.dofmap.dof_layout.num_dofs * bs
 
     if bs == 1:
-        try:
-            dofs = V.dofmap.list().array.reshape(num_cells, num_loc_dofs)
-        except:
-            dofs = V.dofmap.list.array.reshape(num_cells, num_loc_dofs)
+        dofs = V.dofmap.list.reshape(num_cells, num_loc_dofs)
     else:
         dofs = np.ndarray((num_cells, num_loc_dofs), np.int32)
         # r = np.arange(num_loc_dofs)
@@ -67,7 +57,7 @@ def get_vertices(mesh):
     coords = mesh.geometry.x
     gdim = mesh.geometry.dim
     num_cells = get_num_cells(mesh)
-    vertices = mesh.geometry.dofmap.array.reshape(num_cells, -1)
+    vertices = mesh.geometry.dofmap.reshape(num_cells, -1)
     return vertices, coords, gdim
 
 

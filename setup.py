@@ -3,7 +3,7 @@ from setuptools.command.install import install
 import os
 import shutil
 
-VERSION = "0.6.0"
+VERSION = "0.9.0"
 REQUIREMENTS = []
 
 

@@ -32,17 +32,11 @@ alias clear-cache='mkdir -p /root/.cache/fenics && \
 
 # Aliases for dev installation
 
-alias install-ufl='pushd . && \
-                   cd /root/ufl-custom && \
-                   pip3 install -v . -U --force-reinstall && \
-                   popd'
-
 alias install-ffcx='pushd . && \
-                    cd /root/ffcx-custom && \
+                    cd /root/2026-ffcx-priv && \
                     pip3 install -v . -U --no-deps && \
                     popd'
 
 alias install-all='clear-cache && \
-                   install-ufl && \
                    install-ffcx && \
 		   install-customquad'

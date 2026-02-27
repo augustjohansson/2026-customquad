@@ -29,7 +29,7 @@ def write(filename, mesh, data):
         "w",
     ) as xdmffile:
         xdmffile.write_mesh(mesh)
-        if isinstance(data, dolfinx.mesh.MeshTagsMetaClass):
+        if isinstance(data, dolfinx.mesh.MeshTags):
             xdmffile.write_meshtags(data)
         elif isinstance(data, dolfinx.fem.Function):
             xdmffile.write_function(data)
@@ -92,7 +92,7 @@ facetags = customquad.utils.get_facetags(
 write("output/celltags" + str(args.N) + ".xdmf", mesh, celltags)
 
 # FEM
-V = dolfinx.fem.VectorFunctionSpace(mesh, ("Lagrange", 1))
+V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1, (gdim,)))
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
 x = ufl.SpatialCoordinate(mesh)
@@ -239,5 +239,5 @@ H10_integrand = (nabla_grad(uh) - nabla_grad(u_ufl)) ** 2
 H10_err = np.sqrt(assemble(H10_integrand))
 
 write("output/std_vector_poisson" + str(args.N) + ".xdmf", mesh, uh)
-h = dolfinx.cpp.mesh.h(mesh, mesh.topology.dim, cut_cells)
+h = dolfinx.mesh.h(mesh, mesh.topology.dim, cut_cells)
 print(max(h), L2_err, H10_err)
