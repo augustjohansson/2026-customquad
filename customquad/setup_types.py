@@ -21,7 +21,24 @@ import numpy.typing
 
 import dolfinx
 import dolfinx.pkgconfig
-from dolfinx.fem.petsc import load_petsc_lib
+
+try:
+    from dolfinx.fem.petsc import load_petsc_lib
+except ImportError:
+    def load_petsc_lib(loader):
+        petsc_lib_name = ctypes.util.find_library("petsc")
+        if petsc_lib_name is not None:
+            return loader(petsc_lib_name)
+        lib_dir = os.path.join(
+            PETSc_get_config()["PETSC_DIR"],
+            petsc4py.lib.getPathArchPETSc()[1],
+            "lib",
+        )
+        for ext in ("so", "dylib"):
+            lib_path = os.path.join(lib_dir, f"libpetsc.{ext}")
+            if os.path.isfile(lib_path):
+                return loader(lib_path)
+        raise RuntimeError("Could not find PETSc library")
 
 import petsc4py.lib
 from mpi4py import MPI

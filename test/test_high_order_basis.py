@@ -1,10 +1,11 @@
 import pytest
 import basix
 import dolfinx
+import dolfinx.fem
+import dolfinx.fem.petsc
 import ufl
 from mpi4py import MPI
 import numpy as np
-import FIAT
 import common
 import customquad as cq
 from create_high_order_mesh import (
@@ -13,6 +14,18 @@ from create_high_order_mesh import (
 )
 
 flatten = lambda l: [item for sublist in l for item in sublist]
+
+
+def _get_quadrature(cell_type, degree):
+    """Get quadrature points and weights using basix."""
+    if cell_type == "quadrilateral":
+        basix_cell = basix.CellType.quadrilateral
+    elif cell_type == "hexahedron":
+        basix_cell = basix.CellType.hexahedron
+    else:
+        raise ValueError(f"Unsupported cell type: {cell_type}")
+    pts, wts = basix.make_quadrature(basix_cell, degree)
+    return pts, wts
 
 
 @pytest.mark.parametrize(
@@ -24,7 +37,7 @@ flatten = lambda l: [item for sublist in l for item in sublist]
     ],
 )
 @pytest.mark.parametrize(
-    ("polynomial_order", "quadrature_degree"), [(1, 2), (2, 4)]  # , (3, 2), (4, 3)]
+    ("polynomial_order", "quadrature_degree"), [(1, 2), (2, 4)]
 )
 @pytest.mark.parametrize("fcn", [common.fcn1, common.fcn2, common.fcn3, common.fcn4])
 @pytest.mark.xfail
@@ -32,9 +45,9 @@ def test_high_order_quads(assembler, norm, polynomial_order, quadrature_degree, 
     Nx = 2
     Ny = 3
     mesh = create_high_order_quad_mesh(Nx, Ny, polynomial_order)
-    fiat_element = FIAT.reference_element.UFCQuadrilateral()
+    pts, wts = _get_quadrature("quadrilateral", quadrature_degree)
 
-    b, b_ref = assembler(mesh, fiat_element, polynomial_order, quadrature_degree, fcn)
+    b, b_ref = assembler(mesh, pts, wts, polynomial_order, fcn)
 
     assert norm(b - b_ref) / norm(b_ref) < 1e-10
 
@@ -48,7 +61,7 @@ def test_high_order_quads(assembler, norm, polynomial_order, quadrature_degree, 
     ],
 )
 @pytest.mark.parametrize(
-    ("polynomial_order", "quadrature_degree"), [(1, 2), (2, 4)]  # , (3, 2), (4, 3)]
+    ("polynomial_order", "quadrature_degree"), [(1, 2), (2, 4)]
 )
 @pytest.mark.parametrize("fcn", [common.fcn1, common.fcn2, common.fcn3, common.fcn4])
 @pytest.mark.xfail
@@ -57,9 +70,9 @@ def test_high_order_hexes(assembler, norm, polynomial_order, quadrature_degree, 
     Ny = 3
     Nz = 4
     mesh = create_high_order_hex_mesh(Nx, Ny, Nz, polynomial_order)
-    fiat_element = FIAT.reference_element.UFCHexahedron()
+    pts, wts = _get_quadrature("hexahedron", quadrature_degree)
 
-    b, b_ref = assembler(mesh, fiat_element, polynomial_order, quadrature_degree, fcn)
+    b, b_ref = assembler(mesh, pts, wts, polynomial_order, fcn)
 
     assert norm(b - b_ref) / norm(b_ref) < 1e-10
 
@@ -78,7 +91,7 @@ def test_edge_integral():
     num_cells = cq.utils.get_num_cells(mesh)
     cells = np.arange(num_cells)
 
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", polynomial_order))
     v = ufl.TestFunction(V)
     integrand = 1 * v
 
@@ -151,15 +164,12 @@ def test_edge_integral():
 
     tags = [bottom_tag, top_tag, left_tag, right_tag]
 
-    import FIAT
-
-    fiat_element = FIAT.reference_element.UFCInterval()
-    quadrature_degree = 2
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
+    # Use basix quadrature for the interval
+    pts_1d, wts_1d = basix.make_quadrature(basix.CellType.interval, 2)
     qr_pts_local = np.array([[0.0, 0, 0, 0]])
-    qr_pts_local[0][0] = q.get_points()[0][0]
-    qr_pts_local[0][2] = q.get_points()[1][0]
-    qr_w_local = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    qr_pts_local[0][0] = pts_1d[0][0]
+    qr_pts_local[0][2] = pts_1d[1][0]
+    qr_w_local = np.tile(wts_1d.flatten(), [num_cells, 1])
 
     for k in range(4):
         # qr_pts_local = np.expand_dims(qr_pts[k], axis=0)

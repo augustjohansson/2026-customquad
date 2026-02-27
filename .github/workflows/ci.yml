@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  test:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    container:
+      image: dolfinx/dolfinx:v0.9.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pip3 install --no-cache-dir --force-reinstall --no-deps \
+            git+https://github.com/augustjohansson/2026-ffcx-priv.git@main
+          pip3 install --no-cache-dir cppyy
+          git clone --depth=1 https://github.com/algoim/algoim.git && \
+            cp -r algoim /usr/include
+
+      - name: Install customquad
+        run: |
+          export CC="/usr/lib/ccache/g++ -fpermissive"
+          pip3 install . -U
+
+      - name: Run tests
+        run: |
+          export CC="/usr/lib/ccache/g++ -fpermissive"
+          cd test && python3 -m pytest -v

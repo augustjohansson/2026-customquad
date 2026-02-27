@@ -1,4 +1,6 @@
 import dolfinx
+import dolfinx.fem
+import dolfinx.mesh
 import numba
 import numpy as np
 from petsc4py import PETSc
@@ -48,10 +50,7 @@ def get_dofs(V):
     num_loc_dofs = V.dofmap.dof_layout.num_dofs * bs
 
     if bs == 1:
-        try:
-            dofs = V.dofmap.list().array.reshape(num_cells, num_loc_dofs)
-        except:
-            dofs = V.dofmap.list.array.reshape(num_cells, num_loc_dofs)
+        dofs = V.dofmap.list.reshape(num_cells, num_loc_dofs)
     else:
         dofs = np.ndarray((num_cells, num_loc_dofs), np.int32)
         # r = np.arange(num_loc_dofs)
@@ -67,7 +66,7 @@ def get_vertices(mesh):
     coords = mesh.geometry.x
     gdim = mesh.geometry.dim
     num_cells = get_num_cells(mesh)
-    vertices = mesh.geometry.dofmap.array.reshape(num_cells, -1)
+    vertices = mesh.geometry.dofmap.reshape(num_cells, -1)
     return vertices, coords, gdim
 
 

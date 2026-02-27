@@ -1,5 +1,7 @@
 import pytest
 import dolfinx
+import dolfinx.fem
+import dolfinx.mesh
 import ufl
 from mpi4py import MPI
 import numpy as np
@@ -75,7 +77,7 @@ def test_volume():
 
 
 def tensor_product_volumes(mesh, entities, dim):
-    ge = dolfinx.cpp.mesh.entities_to_geometry(mesh, dim, entities, False)
+    ge = dolfinx.mesh.entities_to_geometry(mesh, dim, entities, False)
     x = mesh.geometry.x[ge]
     xmin = np.min(x, axis=1)
     xmax = np.max(x, axis=1)

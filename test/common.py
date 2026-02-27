@@ -1,8 +1,11 @@
 import dolfinx
+import dolfinx.fem
+import dolfinx.fem.petsc
+import dolfinx.mesh
 import ufl
 from ufl import inner
 import numpy as np
-import FIAT
+import basix.ufl
 from numpy import sin, pi, exp
 import customquad as cq
 from mpi4py import MPI
@@ -36,9 +39,9 @@ def matrix_norm(x):
     return x.norm()
 
 
-def assemble_scalar_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_scalar_test(mesh, quadrature_points, quadrature_weights, polynomial_order, fcn):
     # Setup integrand
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", polynomial_order))
     f = dolfinx.fem.Function(V)
     f.interpolate(fcn)
     integrand = inner(f, f)
@@ -47,9 +50,8 @@ def assemble_scalar_test(mesh, fiat_element, polynomial_order, quadrature_degree
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    qr_pts = np.tile(quadrature_points.flatten(), [num_cells, 1])
+    qr_w = np.tile(quadrature_weights.flatten(), [num_cells, 1])
     b = cq.assemble_scalar(L, [(cells, qr_pts, qr_w)])
 
     # Reference
@@ -59,9 +61,9 @@ def assemble_scalar_test(mesh, fiat_element, polynomial_order, quadrature_degree
     return b, b_ref
 
 
-def assemble_vector_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_vector_test(mesh, quadrature_points, quadrature_weights, polynomial_order, fcn):
     # Setup integrand
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", polynomial_order))
     v = ufl.TestFunction(V)
     f = dolfinx.fem.Function(V)
     f.interpolate(fcn)
@@ -71,9 +73,8 @@ def assemble_vector_test(mesh, fiat_element, polynomial_order, quadrature_degree
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    qr_pts = np.tile(quadrature_points.flatten(), [num_cells, 1])
+    qr_w = np.tile(quadrature_weights.flatten(), [num_cells, 1])
     b = cq.assemble_vector(L, [(cells, qr_pts, qr_w)])
 
     # Reference
@@ -83,9 +84,9 @@ def assemble_vector_test(mesh, fiat_element, polynomial_order, quadrature_degree
     return b, b_ref
 
 
-def assemble_matrix_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_matrix_test(mesh, quadrature_points, quadrature_weights, polynomial_order, fcn):
     # Setup integrand
-    V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", polynomial_order))
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
     integrand = inner(u, v)
@@ -94,9 +95,8 @@ def assemble_matrix_test(mesh, fiat_element, polynomial_order, quadrature_degree
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    qr_pts = np.tile(quadrature_points.flatten(), [num_cells, 1])
+    qr_w = np.tile(quadrature_weights.flatten(), [num_cells, 1])
     A = cq.assemble_matrix(L, [(cells, qr_pts, qr_w)])
     A.assemble()
 
@@ -124,7 +124,7 @@ def get_mesh():
     dim = mesh.topology.dim
     num_cells = mesh.topology.index_map(dim).size_local
     all_cells = np.arange(num_cells, dtype=np.int32)
-    ge = dolfinx.cpp.mesh.entities_to_geometry(mesh, dim, all_cells, False)
+    ge = dolfinx.mesh.entities_to_geometry(mesh, dim, all_cells, False)
     centroids = np.mean(mesh.geometry.x[ge], axis=1)
     xc = centroids[:, 0]
     yc = centroids[:, 1]

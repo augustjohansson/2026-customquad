@@ -1,4 +1,6 @@
 import dolfinx
+import dolfinx.fem
+import dolfinx.fem.petsc
 import numba
 import numpy as np
 from .setup_types import ffi, PETSc, sink, get_matsetvalues_api
@@ -12,11 +14,11 @@ def assemble_matrix(form, qr_data):
     dofs, num_loc_dofs = utils.get_dofs(V)
     vertices, coords, gdim = utils.get_vertices(V.mesh)
 
-    integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    all_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
-    consts = dolfinx.cpp.fem.pack_constants(form)
+    integral_ids = form.integral_ids(dolfinx.fem.IntegralType.cell)
+    all_coeffs = dolfinx.fem.pack_coefficients(form._cpp_object)
+    consts = dolfinx.fem.pack_constants(form._cpp_object)
 
-    A = dolfinx.cpp.fem.petsc.create_matrix(form)
+    A = dolfinx.fem.petsc.create_matrix(form)
     A.zeroEntries()
     Ah = A.handle
 
@@ -25,11 +27,11 @@ def assemble_matrix(form, qr_data):
 
     for i, id in enumerate(integral_ids):
         kernel = getattr(
-            form.ufcx_form.integrals(dolfinx.cpp.fem.IntegralType.cell)[i],
+            form.ufcx_form.integrals(dolfinx.fem.IntegralType.cell)[i],
             "tabulate_tensor_runtime_float64",
         )
 
-        coeffs = all_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+        coeffs = all_coeffs[(dolfinx.fem.IntegralType.cell, id)]
         assemble_cells(
             Ah,
             kernel,

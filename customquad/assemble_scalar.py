@@ -1,4 +1,5 @@
 import dolfinx
+import dolfinx.fem
 import numba
 import numpy as np
 from .setup_types import ffi, PETSc
@@ -7,19 +8,19 @@ from . import utils
 
 def assemble_scalar(form, qr_data):
     vertices, coords, _ = utils.get_vertices(form.mesh)
-    integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    all_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
-    consts = dolfinx.cpp.fem.pack_constants(form)
+    integral_ids = form.integral_ids(dolfinx.fem.IntegralType.cell)
+    all_coeffs = dolfinx.fem.pack_coefficients(form._cpp_object)
+    consts = dolfinx.fem.pack_constants(form._cpp_object)
 
     m = np.zeros(1, dtype=PETSc.ScalarType)
 
     for i, id in enumerate(integral_ids):
         kernel = getattr(
-            form.ufcx_form.integrals(dolfinx.cpp.fem.IntegralType.cell)[i],
+            form.ufcx_form.integrals(dolfinx.fem.IntegralType.cell)[i],
             "tabulate_tensor_runtime_float64",
         )
 
-        coeffs = all_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+        coeffs = all_coeffs[(dolfinx.fem.IntegralType.cell, id)]
 
         assemble_cells(
             m,
