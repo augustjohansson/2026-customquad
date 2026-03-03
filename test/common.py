@@ -178,32 +178,8 @@ def get_mesh(N=10):
 
 def entities_to_geometry(mesh, dim, entity_list):
     # See https://github.com/FEniCS/dolfinx/pull/1684
-
-    layout = mesh.geometry.cmap.create_dof_layout()
-    num_entity_dofs = layout.num_entity_closure_dofs(dim)
-    xdofs = mesh.geometry.dofmap
-
-    tdim = mesh.topology.dim
-    mesh.topology.create_entities(dim)
-    mesh.topology.create_connectivity(dim, tdim)
-    mesh.topology.create_connectivity(tdim, dim)
-    e_to_c = mesh.topology.connectivity(dim, tdim)
-    c_to_e = mesh.topology.connectivity(tdim, dim)
-
-    entity_geometry = np.empty((len(entity_list), num_entity_dofs), np.int32)
-
-    for i, idx in enumerate(entity_list):
-        cell = e_to_c.links(idx)[0]
-        cell_entities = c_to_e.links(cell)
-        pos = np.nonzero(cell_entities == idx)[0]
-        assert pos.size
-        local_entity = cell_entities[pos]
-        entity_dofs = layout.entity_closure_dofs(dim, local_entity)
-
-        xc = xdofs.links(cell)
-        entity_geometry[i] = xc[entity_dofs]
-
-    return entity_geometry
+    # Use the dolfinx C++ function which works in both v0.6.x and v0.7.x
+    return dolfinx.cpp.mesh.entities_to_geometry(mesh, dim, np.array(entity_list, dtype=np.int32), False)
 
 
 def setup_midpoint_qr():

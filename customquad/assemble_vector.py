@@ -3,6 +3,7 @@ import numba
 import numpy as np
 from .setup_types import ffi, PETSc
 from . import utils
+from .assemble_scalar import _get_cpp_form, _get_cell_integrals
 
 
 def assemble_vector(form, qr_data):
@@ -20,13 +21,14 @@ def assemble_vector(form, qr_data):
     dofs, num_loc_dofs = utils.get_dofs(V)
     vertices, coords, gdim = utils.get_vertices(V.mesh)
 
-    integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
-    consts = dolfinx.cpp.fem.pack_constants(form)
+    cpp_form = _get_cpp_form(form)
+    integral_ids, integral_structs = _get_cell_integrals(form)
+    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(cpp_form)
+    consts = dolfinx.cpp.fem.pack_constants(cpp_form)
 
     # Map coeffs if coeffs are restricted to subdomain (eg if using
     # form(v*dx(subdomain_id))
-    if len(form.coefficients) > 0:
+    if form.ufcx_form.num_coefficients > 0:
         for i, id in enumerate(integral_ids):
             coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
             cmax = max(qr_data[i][0]) + 1
@@ -38,10 +40,7 @@ def assemble_vector(form, qr_data):
     b = dolfinx.cpp.la.petsc.create_vector(V.dofmap.index_map, V.dofmap.index_map_bs)
 
     for i, id in enumerate(integral_ids):
-        kernel = getattr(
-            form.ufcx_form.integrals(dolfinx.cpp.fem.IntegralType.cell)[i],
-            "tabulate_tensor_runtime_float64",
-        )
+        kernel = integral_structs[i].tabulate_tensor_runtime_float64
 
         coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
 
@@ -106,3 +105,4 @@ def assemble_cells(b, kernel, vertices, coords, dofs, num_loc_dofs, coeffs, cons
         for j in range(num_loc_dofs):
             b[dofs[cell, j]] += b_local[j]
         # print("glob", b.array)
+

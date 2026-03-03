@@ -46,7 +46,6 @@ cd /work
 
 echo "Installing ffcx-custom (editable include -e)"
 cd /work/ffcx-custom
-git checkout august/customquad
 python3 -m pip install -v . --no-deps
 cd /work
 
