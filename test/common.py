@@ -1,8 +1,9 @@
+# Help routines for the tests
+
 import dolfinx
 import ufl
-from ufl import inner
 import numpy as np
-import FIAT
+import basix
 from numpy import sin, pi, exp
 import customquad as cq
 from mpi4py import MPI
@@ -36,20 +37,21 @@ def matrix_norm(x):
     return x.norm()
 
 
-def assemble_scalar_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_scalar_test(mesh, polynomial_order, quadrature_degree, fcn):
     # Setup integrand
     V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
     f = dolfinx.fem.Function(V)
     f.interpolate(fcn)
-    integrand = inner(f, f)
+    integrand = ufl.inner(f, f)
 
     # Runtime quadrature
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    cell_type = getattr(basix.CellType, mesh.topology.cell_type.name)
+    p, w = basix.make_quadrature(cell_type, quadrature_degree)
+    qr_pts = np.tile(p.flatten(), [num_cells, 1])
+    qr_w = np.tile(w, [num_cells, 1])
     b = cq.assemble_scalar(L, [(cells, qr_pts, qr_w)])
 
     # Reference
@@ -59,21 +61,22 @@ def assemble_scalar_test(mesh, fiat_element, polynomial_order, quadrature_degree
     return b, b_ref
 
 
-def assemble_vector_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_vector_test(mesh, polynomial_order, quadrature_degree, fcn):
     # Setup integrand
     V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
     v = ufl.TestFunction(V)
     f = dolfinx.fem.Function(V)
     f.interpolate(fcn)
-    integrand = inner(f, v)
+    integrand = ufl.inner(f, v)
 
     # Runtime quadrature
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    cell_type = getattr(basix.CellType, mesh.topology.cell_type.name)
+    p, w = basix.make_quadrature(cell_type, quadrature_degree)
+    qr_pts = np.tile(p.flatten(), [num_cells, 1])
+    qr_w = np.tile(w, [num_cells, 1])
     b = cq.assemble_vector(L, [(cells, qr_pts, qr_w)])
 
     # Reference
@@ -83,20 +86,21 @@ def assemble_vector_test(mesh, fiat_element, polynomial_order, quadrature_degree
     return b, b_ref
 
 
-def assemble_matrix_test(mesh, fiat_element, polynomial_order, quadrature_degree, fcn):
+def assemble_matrix_test(mesh, polynomial_order, quadrature_degree, fcn):
     # Setup integrand
     V = dolfinx.fem.FunctionSpace(mesh, ("Lagrange", polynomial_order))
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
-    integrand = inner(u, v)
+    integrand = ufl.inner(u, v)
 
     # Runtime quadrature
     L = dolfinx.fem.form(integrand * ufl.dx(metadata={"quadrature_rule": "runtime"}))
     num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
     cells = np.arange(num_cells)
-    q = FIAT.create_quadrature(fiat_element, quadrature_degree)
-    qr_pts = np.tile(q.get_points().flatten(), [num_cells, 1])
-    qr_w = np.tile(q.get_weights().flatten(), [num_cells, 1])
+    cell_type = getattr(basix.CellType, mesh.topology.cell_type.name)
+    p, w = basix.make_quadrature(cell_type, quadrature_degree)
+    qr_pts = np.tile(p.flatten(), [num_cells, 1])
+    qr_w = np.tile(w, [num_cells, 1])
     A = cq.assemble_matrix(L, [(cells, qr_pts, qr_w)])
     A.assemble()
 
@@ -108,11 +112,10 @@ def assemble_matrix_test(mesh, fiat_element, polynomial_order, quadrature_degree
     return A, A_ref
 
 
-def get_mesh():
+def get_mesh(N=10):
+
     # Mesh
-    N = 10
     cell_type = dolfinx.mesh.CellType.quadrilateral
-    # mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N, cell_type)
     xmin = np.array([-1.23, -11.11])
     xmax = np.array([3.33, 99.99])
     mesh = dolfinx.mesh.create_rectangle(
@@ -171,3 +174,71 @@ def get_mesh():
         uncut_cell_tag,
         outside_cell_tag,
     )
+
+
+def entities_to_geometry(mesh, dim, entity_list):
+    # See https://github.com/FEniCS/dolfinx/pull/1684
+
+    layout = mesh.geometry.cmap.create_dof_layout()
+    num_entity_dofs = layout.num_entity_closure_dofs(dim)
+    xdofs = mesh.geometry.dofmap
+
+    tdim = mesh.topology.dim
+    mesh.topology.create_entities(dim)
+    mesh.topology.create_connectivity(dim, tdim)
+    mesh.topology.create_connectivity(tdim, dim)
+    e_to_c = mesh.topology.connectivity(dim, tdim)
+    c_to_e = mesh.topology.connectivity(tdim, dim)
+
+    entity_geometry = np.empty((len(entity_list), num_entity_dofs), np.int32)
+
+    for i, idx in enumerate(entity_list):
+        cell = e_to_c.links(idx)[0]
+        cell_entities = c_to_e.links(cell)
+        pos = np.nonzero(cell_entities == idx)[0]
+        assert pos.size
+        local_entity = cell_entities[pos]
+        entity_dofs = layout.entity_closure_dofs(dim, local_entity)
+
+        xc = xdofs.links(cell)
+        entity_geometry[i] = xc[entity_dofs]
+
+    return entity_geometry
+
+
+def setup_midpoint_qr():
+
+    N = 5
+    (
+        mesh,
+        h,
+        celltags,
+        cut_cell_tag,
+        uncut_cell_tag,
+        outside_cell_tag,
+    ) = get_mesh(N)
+
+    cell_vol = np.prod(h)
+
+    with dolfinx.io.XDMFFile(mesh.comm, "mesh.xdmf", "w") as xdmf:
+        xdmf.write_mesh(mesh)
+        xdmf.write_meshtags(celltags)
+
+    cut_cells = np.where(celltags.values == cut_cell_tag)[0]
+    uncut_cells = np.where(celltags.values == uncut_cell_tag)[0]
+    outside_cells = np.where(celltags.values == outside_cell_tag)[0]
+
+    # QR
+    dim = mesh.geometry.dim
+    qr_pts = np.tile([0.5] * dim, [len(cut_cells), 1])
+    qr_w = np.tile(1.0, [len(cut_cells), 1])
+    qr_n = qr_pts # dummy
+    qr_data = [(cut_cells, qr_pts, qr_w, qr_n)]
+
+    # Measures
+    dx_sub = ufl.dx(
+        subdomain_data=celltags, metadata={"quadrature_rule": "runtime"}, domain=mesh
+    )
+    dx_cut = ufl.dx(metadata={"quadrature_rule": "runtime"}, domain=mesh)
+
+    return mesh, cell_vol, dx_sub, dx_cut, qr_data, cut_cell_tag, celltags

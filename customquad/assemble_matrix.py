@@ -13,8 +13,19 @@ def assemble_matrix(form, qr_data):
     vertices, coords, gdim = utils.get_vertices(V.mesh)
 
     integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    all_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
+    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
     consts = dolfinx.cpp.fem.pack_constants(form)
+
+    # Map coeffs if coeffs are restricted to subdomain (eg if using
+    # form(v*dx(subdomain_id))
+    if len(form.coefficients) > 0:
+        for i, id in enumerate(integral_ids):
+            coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+            cmax = max(qr_data[i][0]) + 1
+            if coeffs.shape[0] < cmax:
+                coeffs_exp = np.zeros((cmax, coeffs.shape[1]))
+                coeffs_exp[qr_data[i][0], :] = coeffs
+                fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)] = coeffs_exp
 
     A = dolfinx.cpp.fem.petsc.create_matrix(form)
     A.zeroEntries()
@@ -29,7 +40,8 @@ def assemble_matrix(form, qr_data):
             "tabulate_tensor_runtime_float64",
         )
 
-        coeffs = all_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+        coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+
         assemble_cells(
             Ah,
             kernel,

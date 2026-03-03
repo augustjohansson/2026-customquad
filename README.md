@@ -2,8 +2,8 @@
 
 The Customquad library allows for custom quadrature rules to be used
 in FEniCSx (https://fenicsproject.org). By custom quadrature we mean
-user-specified quadrature rules in different elements specified at
-runtime. These can be used for performing surface and volume integrals
+**user-specified quadrature rules in different elements specified at
+runtime**. These can be used for performing surface and volume integrals
 over cut elements in methods such as CutFEM, TraceFEM and
 \phi-FEM. The user can also provide normals in the quadrature
 points.
@@ -26,42 +26,27 @@ Some of the demos use the Algoim library for obtaining quadrature
 rules. It is found at
 - https://algoim.github.io
 
-## Installation (non-dev)
+## Installation
 
-Please use the provided docker file based on the dolfinx docker
-image. The docker file may be built and run from the main directory as
+First time (or after submodule changes):
 ```
-docker build -f docker/Dockerfile -t customquad .
-docker run -it -v `pwd`:/root customquad bash -i
+git submodule update --init --recursive
+docker compose build
+docker compose run --rm dev
 ```
-Then install the customquad module using pip, e.g.,
+or simply
 ```
-pip3 install . -U
+docker compose run --rm dev
 ```
-Compiling the ffcx forms with runtime quadrature requires a C++
-compiler, whereas standard ffcx forms is compiled using a C
-compiler. For now we simply overwrite the C compiler with a C++
-compiler. In addition, since C++ forbids pointer and integer
-comparison, the -fpermissive flag must be set.
-```
-export CC="/usr/lib/ccache/g++ -fpermissive"
-```
-A bashrc file with useful aliases is provided in the utils directory.
 
-## Installation (dev)
 
-For the development of this library, the development of ffcx is the
-most challenging part. I have the following setup:
-```
-git clone git@github.com:augustjohansson/customquad.git
-cd customquad
-git clone git@github.com:augustjohansson/ffcx-custom.git
-git clone git@github.com:augustjohansson/ufl-custom.git
-git config --global --add safe.directory /root/ffcx-custom
-```
-Then I start the container and use the `install-all` alias in the
-provided bashrc.sh to install ffcx, ufl and customquad, as well as
-overriding the C compiler with a C++ compiler as described above.
+## How to contribute
+
+If you find a bug or have suggestions for improvements, please place
+an issue using the GitHub issue tracker. To contribute to the code,
+please file a pull request or start an issue as a basis for
+discussions. Please follow the code of conduct of
+https://www.contributor-covenant.org.
 
 ## Description
 
@@ -103,11 +88,11 @@ such as `libffcx_forms_...c` which contaian standard tabulate tensor
 functions that may look like
 ```cpp
 void tabulate_tensor_integral_a0f3282139356df733c38db2e5d422f3272a1d5c(double*  A,
-				    const double*  w,
-				    const double*  c,
-				    const double*  coordinate_dofs,
-				    const int*  entity_local_index,
-				    const uint8_t*  quadrature_permutation)
+					const double*  w,
+					const double*  c,
+					const double*  coordinate_dofs,
+					const int*  entity_local_index,
+					const uint8_t*  quadrature_permutation)
 {
   // Quadrature rules
   static const double weights_8c4[16] = { 0.03025074832140047, 0.05671296296296294, 0.05671296296296292, 0.03025074832140047, 0.05671296296296294, 0.1063233257526736, 0.1063233257526736, 0.05671296296296294, 0.05671296296296292, 0.1063233257526736, 0.1063233257526735, 0.05671296296296292, 0.03025074832140047, 0.05671296296296294, 0.05671296296296292, 0.03025074832140047 };
@@ -131,15 +116,15 @@ quadrature points.
 A tabulate tensor function with runtime quadrature may look like this:
 ```cpp
 void tabulate_tensor_integral_3edb7c068402923a697d72e1b03e0957554f29c3(double* A,
-				    const double* w,
-				    const double* c,
-				    const double* coordinate_dofs,
-				    const int* entity_local_index,
-				    const uint8_t* quadrature_permutation,
-				    int num_quadrature_points,
-				    const double* quadrature_points,
-				    const double* quadrature_weights,
-				    const double* quadrature_normals)
+					const double* w,
+					const double* c,
+					const double* coordinate_dofs,
+					const int* entity_local_index,
+					const uint8_t* quadrature_permutation,
+					int num_quadrature_points,
+					const double* quadrature_points,
+					const double* quadrature_weights,
+					const double* quadrature_normals)
 {
   // Quadrature rules
   const double* weights_8eb = quadrature_weights;
@@ -158,7 +143,7 @@ void tabulate_tensor_integral_3edb7c068402923a697d72e1b03e0957554f29c3(double* A
 }
 ```
 The `call_basix` function is a C++ function that evaluates the basis
-(and derivatives) using basix (see `call_basix.hpp`). There's room for
+(and derivatives) using basix (see `call_basix.h`). There's room for
 improvement here: one call to `call_basix` should be sufficient. Note
 that evaluating the Jacobian needs derivatives of the basis. The fixed
 arguments to `call_basix` include type of basis function, which

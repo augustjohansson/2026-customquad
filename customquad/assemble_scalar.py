@@ -5,11 +5,24 @@ from .setup_types import ffi, PETSc
 from . import utils
 
 
-def assemble_scalar(form, qr_data):
+def assemble_scalar(form, qr_data, debug=False, debug_message="Mapping FE coeffs..."):
     vertices, coords, _ = utils.get_vertices(form.mesh)
     integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    all_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
+    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
     consts = dolfinx.cpp.fem.pack_constants(form)
+
+    # Map coeffs if coeffs are restricted to subdomain (eg if using
+    # form(v*dx(subdomain_id))
+    if len(form.coefficients) > 0:
+        for i, id in enumerate(integral_ids):
+            coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+            cmax = max(qr_data[i][0]) + 1
+            if coeffs.shape[0] < cmax:
+                if debug:
+                    print(debug_message)
+                coeffs_exp = np.zeros((cmax, coeffs.shape[1]))
+                coeffs_exp[qr_data[i][0], :] = coeffs
+                fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)] = coeffs_exp
 
     m = np.zeros(1, dtype=PETSc.ScalarType)
 
@@ -18,8 +31,7 @@ def assemble_scalar(form, qr_data):
             form.ufcx_form.integrals(dolfinx.cpp.fem.IntegralType.cell)[i],
             "tabulate_tensor_runtime_float64",
         )
-
-        coeffs = all_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
+        coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
 
         assemble_cells(
             m,
@@ -46,11 +58,6 @@ def assemble_cells(m, kernel, vertices, coords, coeffs, consts, qr):
 
     assert len(cells) == len(qr_pts)
     assert len(cells) == len(qr_w)
-
-    # # This is needed if running w/o numba. With numba, if
-    # len(coeffs) == 0, the coeffs[cell] is still ok
-    # if len(coeffs) = 0:
-    #   coeffs = [] * len(cells)
 
     # Initialize
     num_loc_vertices = vertices.shape[1]
