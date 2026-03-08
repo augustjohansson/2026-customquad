@@ -1,0 +1,68 @@
+--- a/ffc/quadrature/quadraturerepresentation.py
++++ b/ffc/quadrature/quadraturerepresentation.py
+@@ -209,7 +209,8 @@
+             terms[i] = _transform_integrals(transformer, integrals_dict,
+                                             integral_type)
+ 
+-    elif integral_type in custom_integral_types:
++    elif integral_type in custom_integral_types \
++            or integral_type == "exterior_cut_facet":
+ 
+         # Compute transformed integrals: same as for cell integrals
+         info("Transforming custom integral")
+--- a/ffc/representationutils.py
++++ b/ffc/representationutils.py
+@@ -48,7 +48,8 @@
+         (points, weights) = create_quadrature(cellname2facetname[cell.cellname()], degree, rule)
+     elif integral_type in point_integral_types:
+         (points, weights) = create_quadrature("vertex", degree, rule)
+-    elif integral_type in custom_integral_types:
++    elif integral_type in custom_integral_types \
++            or integral_type == "exterior_cut_facet":
+         (points, weights) = (None, None)
+     else:
+         error("Unknown integral type: " + str(integral_type))
+@@ -63,7 +64,8 @@
+         entity_dim = tdim - 1
+     elif integral_type in point_integral_types:
+         entity_dim = 0
+-    elif integral_type in custom_integral_types:
++    elif integral_type in custom_integral_types \
++            or integral_type == "exterior_cut_facet":
+         entity_dim = tdim
+     else:
+         error("Unknown integral_type: %s" % integral_type)
+--- a/ffc/analysis.py
++++ b/ffc/analysis.py
+@@ -290,7 +290,8 @@
+ 
+ def _has_custom_integrals(o):
+     if isinstance(o, Integral):
+-        return o.integral_type() in custom_integral_types
++        return o.integral_type() in custom_integral_types \
++            or o.integral_type() == "exterior_cut_facet"
+     elif isinstance(o, Form):
+         return any(_has_custom_integrals(itg) for itg in o.integrals())
+     elif isinstance(o, (list, tuple)):
+--- a/ffc/quadrature/quadraturegenerator.py
++++ b/ffc/quadrature/quadraturegenerator.py
+@@ -257,7 +257,8 @@
+         jacobi_code += "\n"
+         jacobi_code += "\n\n" + format["facet determinant"](tdim, gdim)  # FIXME: This is not defined in a point???
+ 
+-    elif integral_type in custom_integral_types:
++    elif integral_type in custom_integral_types \
++            or integral_type == "exterior_cut_facet":
+ 
+         # Set number of cells and whether we need to generate facet normals
+         if integral_type == "cutcell":
+@@ -340,7 +341,8 @@
+     # restructure this function.
+ 
+     # Add common code except for custom integrals
+-    if integral_type not in custom_integral_types:
++    if integral_type not in custom_integral_types \
++            and integral_type != "exterior_cut_facet":
+         common += _tabulate_weights([quadrature_rules[p] for p in sorted(used_weights)])
+ 
+         # Add common code for updating tables

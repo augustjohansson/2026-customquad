@@ -10,3 +10,15 @@ services:
     stdin_open: true
     tty: true
     command: bash -lc "./docker/install-all.sh && exec bash -i"
+
+  mm-cut-ds:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-mm-cut-ds
+    image: customquad-mm-cut-ds
+    working_dir: /work
+    volumes:
+      - ./:/work
+    stdin_open: true
+    tty: true
+    command: bash

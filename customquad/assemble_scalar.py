@@ -5,15 +5,31 @@ from .setup_types import ffi, PETSc
 from . import utils
 
 
+def _get_cpp_form(form):
+    """Get the C++ form object, handling both v0.6.x and v0.7.x dolfinx APIs."""
+    return getattr(form, '_cpp_object', form)
+
+
+def _get_cell_integrals(form):
+    """Return (integral_ids, integral_structs) for cell integrals from a ufcx form."""
+    cell_type_idx = 0  # cell = 0 in ufcx_integral_type enum
+    start = form.ufcx_form.form_integral_offsets[cell_type_idx]
+    end = form.ufcx_form.form_integral_offsets[cell_type_idx + 1]
+    ids = [form.ufcx_form.form_integral_ids[start + i] for i in range(end - start)]
+    itgs = [form.ufcx_form.form_integrals[start + i] for i in range(end - start)]
+    return ids, itgs
+
+
 def assemble_scalar(form, qr_data, debug=False, debug_message="Mapping FE coeffs..."):
     vertices, coords, _ = utils.get_vertices(form.mesh)
-    integral_ids = form.integral_ids(dolfinx.cpp.fem.IntegralType.cell)
-    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(form)
-    consts = dolfinx.cpp.fem.pack_constants(form)
+    cpp_form = _get_cpp_form(form)
+    integral_ids, integral_structs = _get_cell_integrals(form)
+    fem_coeffs = dolfinx.cpp.fem.pack_coefficients(cpp_form)
+    consts = dolfinx.cpp.fem.pack_constants(cpp_form)
 
     # Map coeffs if coeffs are restricted to subdomain (eg if using
     # form(v*dx(subdomain_id))
-    if len(form.coefficients) > 0:
+    if form.ufcx_form.num_coefficients > 0:
         for i, id in enumerate(integral_ids):
             coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
             cmax = max(qr_data[i][0]) + 1
@@ -27,10 +43,7 @@ def assemble_scalar(form, qr_data, debug=False, debug_message="Mapping FE coeffs
     m = np.zeros(1, dtype=PETSc.ScalarType)
 
     for i, id in enumerate(integral_ids):
-        kernel = getattr(
-            form.ufcx_form.integrals(dolfinx.cpp.fem.IntegralType.cell)[i],
-            "tabulate_tensor_runtime_float64",
-        )
+        kernel = integral_structs[i].tabulate_tensor_runtime_float64
         coeffs = fem_coeffs[(dolfinx.cpp.fem.IntegralType.cell, id)]
 
         assemble_cells(
@@ -87,3 +100,4 @@ def assemble_cells(m, kernel, vertices, coords, coeffs, consts, qr):
         )
 
         m[0] += m_local[0]
+

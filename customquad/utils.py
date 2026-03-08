@@ -31,27 +31,18 @@ def get_num_nodes(mesh):
 
 
 def get_dofs(V):
-    """
-    customquad.assemble
-    (Pdb++) V
-    <dolfinx.cpp.fem.FunctionSpace object at 0x7fb5163b5eb0>
-    <dolfinx.cpp.fem.DofMap object at 0x7fb521c7ae30>
-    have list()
-
-    but if type(V) = <class 'dolfinx.fem.function.FunctionSpace'>`
-    <dolfinx.fem.dofmap.DofMap object at 0x7fe5f7511360>
-    have V.dofmap.list
-
-    """
     num_cells = get_num_cells(V.mesh)
     bs = V.dofmap.index_map_bs
     num_loc_dofs = V.dofmap.dof_layout.num_dofs * bs
 
     if bs == 1:
-        try:
-            dofs = V.dofmap.list().array.reshape(num_cells, num_loc_dofs)
-        except:
-            dofs = V.dofmap.list.array.reshape(num_cells, num_loc_dofs)
+        # In dolfinx >= 0.7, V.dofmap.list returns a 2D numpy array directly.
+        # In dolfinx < 0.7, V.dofmap.list is an AdjacencyList with a .array attribute.
+        dofmap_list = V.dofmap.list
+        if hasattr(dofmap_list, 'array'):
+            dofs = dofmap_list.array.reshape(num_cells, num_loc_dofs)
+        else:
+            dofs = np.array(dofmap_list).reshape(num_cells, num_loc_dofs)
     else:
         dofs = np.ndarray((num_cells, num_loc_dofs), np.int32)
         # FIXME vectorize
@@ -66,7 +57,13 @@ def get_vertices(mesh):
     coords = mesh.geometry.x
     gdim = mesh.geometry.dim
     num_cells = get_num_cells(mesh)
-    vertices = mesh.geometry.dofmap.array.reshape(num_cells, -1)
+    dofmap = mesh.geometry.dofmap
+    if hasattr(dofmap, 'array'):
+        # dolfinx < 0.7: dofmap is an AdjacencyList with a flat .array
+        vertices = dofmap.array.reshape(num_cells, -1)
+    else:
+        # dolfinx >= 0.7: dofmap is already a 2D numpy array
+        vertices = np.array(dofmap)
     return vertices, coords, gdim
 
 

@@ -1,0 +1,14 @@
+include AUTHORS
+include COPYING
+include COPYING.LESSER
+include ChangeLog.rst
+include INSTALL
+include LICENSE
+include ffcx/codegeneration/ufcx.h
+recursive-include cmake *
+recursive-include demo *
+recursive-include doc *
+recursive-include ffcx *.in
+recursive-include libs *
+recursive-include test *
+global-exclude __pycache__ *.pyc

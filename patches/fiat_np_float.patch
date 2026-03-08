@@ -1,0 +1,22 @@
+--- a/test/unit/test_discontinuous_taylor.py
++++ b/test/unit/test_discontinuous_taylor.py
+@@ -38,7 +38,7 @@
+ 
+     for test_degree in range(degree + 1):
+         coefs = [n(lambda x: x[0]**test_degree) for n in fe.dual.nodes]
+-        integral = np.float(np.dot(coefs, np.dot(tab, q.wts)))
++        integral = float(np.dot(coefs, np.dot(tab, q.wts)))
+         reference = np.dot([x[0]**test_degree
+                             for x in q.pts], q.wts)
+         assert np.isclose(integral, reference, rtol=1e-14)
+--- a/test/unit/test_discontinuous_pc.py
++++ b/test/unit/test_discontinuous_pc.py
+@@ -40,7 +40,7 @@
+ 
+     for test_degree in range(degree + 1):
+         coefs = [n(lambda x: x[0]**test_degree) for n in fe.dual.nodes]
+-        integral = np.float(np.dot(coefs, np.dot(tab, q.wts)))
++        integral = float(np.dot(coefs, np.dot(tab, q.wts)))
+         reference = np.dot([x[0]**test_degree
+                             for x in q.pts], q.wts)
+         assert np.isclose(integral, reference, rtol=1e-14)

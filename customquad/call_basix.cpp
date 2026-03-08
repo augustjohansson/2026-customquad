@@ -25,10 +25,13 @@ void call_basix(double***** FE,
   using cmdspan4_t = stdex::mdspan<const double, stdex::dextents<std::size_t, 4>>;
   
   // Create the lagrange element
-  basix::FiniteElement lagrange = basix::create_element(basix::element::family(family),
-							basix::cell::type(cell_type),
-							degree,
-							basix::element::lagrange_variant::equispaced);
+  basix::FiniteElement<double> lagrange = basix::create_element<double>(
+      basix::element::family(family),
+      basix::cell::type(cell_type),
+      degree,
+      basix::element::lagrange_variant::equispaced,
+      basix::element::dpc_variant::simplex_equispaced,
+      false);
 
   // Number of derivatives to obtain (0 or first order for now)
   const int nd = basix_derivative == 0 ? 0 : 1;

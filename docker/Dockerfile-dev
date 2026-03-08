@@ -1,4 +1,4 @@
-FROM dolfinx/dolfinx:v0.6.0-r1
+FROM dolfinx/dolfinx:v0.7.3
 
 RUN python3 -m pip install --no-cache-dir -U pip && \
     python3 -m pip install --no-cache-dir cppyy pdbpp
@@ -16,7 +16,7 @@ RUN apt-get update && \
 COPY customquad/call_basix.h /usr/local/include/call_basix.h
 COPY customquad/call_basix.cpp /tmp/call_basix.cpp
 RUN g++ -std=c++20 -fPIC -shared /tmp/call_basix.cpp -o /usr/local/lib/libcall_basix.so \
-      -L/usr/local/lib -L/usr/local/dolfinx-real/lib -lbasix && ldconfig
+      -L/usr/local/lib -lbasix && ldconfig
 
 WORKDIR /work
 SHELL ["/bin/bash", "-lc"]

@@ -1,0 +1,21 @@
+--- a/FIAT/serendipity.py
++++ b/FIAT/serendipity.py
+@@ -167,9 +167,16 @@
+                     callable = lambdify(variables[:dim], polynomials, modules="numpy", dummify=True)
+                     self.basis[alpha] = polynomials
+                     self.basis_callable[alpha] = callable
+-                tabulation = callable(*(points[:, i] for i in range(pointdim)))
+-                T = np.asarray([np.broadcast_to(tab, (npoints, ))
+-                                for tab in tabulation])
++                # Evaluate point by point to avoid numpy inhomogeneous array
++                # errors (numpy >= 1.24) when lambdify mixes scalar and array
++                # results (e.g. constant derivative terms alongside polynomial ones).
++                n_basis = self.space_dimension()
++                T = np.zeros((n_basis, npoints))
++                for j in range(npoints):
++                    vals = np.asarray(
++                        callable(*(float(points[j, i]) for i in range(pointdim))),
++                        dtype=float)
++                    T[:, j] = vals.ravel()
+                 phivals[alpha] = T
+         return phivals
