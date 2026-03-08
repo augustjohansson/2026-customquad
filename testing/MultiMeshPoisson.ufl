@@ -1,0 +1,36 @@
+from ufl_legacy import *
+
+# Define element
+element = FiniteElement("Lagrange", triangle, 1)
+
+# Define trial and test functions and right-hand side
+u = TrialFunction(element)
+v = TestFunction(element)
+f = Coefficient(element)
+
+# Define facet normal and mesh size
+n = FacetNormal(triangle)
+h = 2.0*Circumradius(triangle)
+h_avg = (h('+') + h('-')) / 2
+
+# Parameters
+beta_N = 10.0
+beta_s = 10.0
+
+# Define bilinear form
+a = dot(grad(u), grad(v))*dX \
+  - dot(avg(grad(u)), jump(v, n))*dI \
+  - dot(avg(grad(v)), jump(u, n))*dI \
+  + beta_N/h_avg * jump(u)*jump(v)*dI \
+  + beta_s/h_avg**2 * dot(jump(u), jump(v))*dO
+
+# Define linear form
+L = f*v*dX
+
+# Weak bdry conditions
+u0 = 1.0
+a += - dot(u, dot(n, grad(v)))*dsC \
+  - dot(dot(n, grad(u)), v)*dsC \
+  + beta_N/h*dot(u, v)*dsC
+L += -dot(u0, dot(n, grad(v)))*dsC \
+  + beta_N/h*dot(u0, v)*dsC

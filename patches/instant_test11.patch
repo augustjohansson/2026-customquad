@@ -1,0 +1,23 @@
+--- a/test/test11.py
++++ b/test/test11.py
+@@ -1,6 +1,7 @@
+ from __future__ import print_function
+ import pytest
+ import numpy
++import os
+ import time
+ import instant
+ from instant import inline_with_numpy
+@@ -17,9 +18,11 @@
+ }
+     """
+ 
++    _testdir = os.path.dirname(os.path.abspath(__file__))
+     some_func = inline_with_numpy(c_code, arrays=[['n1', 'array1']],
+-                                  local_headers=["./some_func.h"],
+-                                  libraries = ["m"])
++                                  local_headers=['some_func.h'],
++                                  source_directory=_testdir,
++                                  libraries=['m'])
+ 
+     a = numpy.arange(10000000); a = numpy.sin(a)
